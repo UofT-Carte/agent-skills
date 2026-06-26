@@ -36,6 +36,16 @@ claude mcp add --transport http alliance-docs https://alliance-docs-mcp.fly.dev/
 - Staging code/data onto the cluster or pulling results back.
 - A job `FAILED`/`TIMEOUT`/sits `PENDING` and you're diagnosing why — **see the troubleshooting table in `slurm-ops-reference.md`**.
 
+## First-time setup (once per person, before your first SSH)
+
+New to the Alliance? Three things happen in **CCDB** (`https://ccdb.alliancecan.ca`), not the shell, and **all must be done before you can log in**. If unsure of the current steps, look them up via the `alliance-docs` MCP (`Getting_started`, `Multifactor_authentication`, `SSH_Keys`):
+
+1. **Enroll MFA** — a second factor is mandatory on every interactive SSH login.
+2. **Request access to the specific cluster** (Resources → Access Systems → select cluster → "I request access"). Holding an allocation does **not** auto-grant access; propagation takes up to ~1 h. *Which cluster? →* **`choosing-an-alliance-cluster`**.
+3. **Register an SSH key** (My Account → SSH Keys — the Alliance uses a central CCDB key registry, not per-host `authorized_keys`), or plan to log in with your CCDB password + MFA.
+
+**Know your two names** — they differ and you use both: your **login username** is personal (chosen at signup, e.g. `ssh <user>@<cluster>.alliancecan.ca`); your **account** is your PI's allocation group `def-<pi>` (e.g. `--account=def-smith`). Confirm the exact account string on the cluster with `sacctmgr show assoc user=$USER format=account%30`.
+
 ## The campaign workflow
 
 Every run, in order. Each step exists to surface a failure *before* it costs GPU time.

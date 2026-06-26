@@ -21,10 +21,12 @@ Login nodes: editing, git, short data prep, job submission — **no GPU, no heav
 
 ```bash
 ssh <user>@<cluster>.alliancecan.ca       # (MFA — a human does this)
-cd ~/projects/def-<pi>/<user>             # durable; or ~/scratch/<user>
+mkdir -p ~/projects/def-<pi>/$USER        # on Nibi, /project subdirs are self-created — don't assume it exists
+cd ~/projects/def-<pi>/$USER              # durable; or ~/scratch/$USER
 
-# Option A — HTTPS + a GitHub Personal Access Token (paste the token when prompted
-# for a password), cached so you aren't re-prompted every pull:
+# Option A — HTTPS + a GitHub Personal Access Token (create one at GitHub > Settings >
+# Developer settings > Personal access tokens, `repo` scope; paste it when prompted for
+# a password), cached so you aren't re-prompted every pull:
 git config --global credential.helper 'cache --timeout=86400'
 git clone https://github.com/<owner>/<repo>.git
 
@@ -39,12 +41,13 @@ A private repo needs one of these once; a public repo clones with no auth. Set y
 **Every time after — tracked → git, gitignored → rsync.** Pull with `--ff-only` (fails loudly instead of merging over cluster-local edits); rsync only the gitignored files git can't carry.
 
 ```bash
-# CODE / CONFIG (tracked)
-git commit -am "..."; git push          # local
+# CODE / CONFIG (tracked) — git steps run on your laptop, then on the cluster
+git commit -am "..."; git push           # on your laptop
 ssh <user>@<cluster>.alliancecan.ca      # (MFA — a human does this)
-cd <proj> && git pull --ff-only
+cd <proj> && git pull --ff-only          # on the cluster
 
-# DATA + RESULTS (gitignored): rsync only — git will NOT carry these
+# DATA + RESULTS (gitignored): rsync only — git will NOT carry these.
+# rsync runs FROM YOUR LAPTOP (the login node is also the transfer node):
 rsync -av --exclude '.venv' --exclude env --exclude __pycache__ \
   --exclude .pytest_cache --exclude results \
   ./ <user>@<cluster>.alliancecan.ca:<proj>/             # push data up
@@ -53,10 +56,10 @@ rsync -av <user>@<cluster>.alliancecan.ca:<proj>/results/ results/   # pull resu
 
 **The stale-data trap:** `git pull` updates code but cannot touch gitignored `data/`, so the cluster runs new configs against an **old dataset** and dies (e.g. `KeyError` on a filename that only exists in the new data). When data changes you must rsync it.
 
-**Resume-safe rsync of one huge file** (e.g. a 133 GB parquet); run under `tmux`/`screen`:
+**Resume-safe rsync of one huge file** (e.g. a big dataset/checkpoint); run **from your laptop**, under `tmux`/`screen` so a dropped SSH session doesn't restart the transfer:
 ```bash
 rsync -ah --partial --append-verify --mkpath --no-inc-recursive --info=progress2 \
-  /local/path/big.parquet  <user>@nibi.alliancecan.ca:/scratch/<user>/<proj>/data/big.parquet
+  /local/path/big.parquet  <user>@<cluster>.alliancecan.ca:/scratch/$USER/<proj>/data/big.parquet
 ```
 `--partial`+`--append-verify` resume then checksum the whole file; `--mkpath` makes missing dirs (rsync ≥ 3.2.3); `--no-inc-recursive --info=progress2` give one aggregate progress line. **Always verify after transfer** — size *and* semantics (e.g. `pq.read_metadata(f).num_rows`).
 

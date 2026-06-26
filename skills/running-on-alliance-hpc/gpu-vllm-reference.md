@@ -80,9 +80,10 @@ pip install -e . --no-deps --no-build-isolation
 
 **Build the venv ONCE on the login node.** Concurrent array tasks installing into the *same* venv path race and corrupt it. Build (+ patch + prefetch) once on login; GPU jobs only `source` it. For thousands of short jobs, build into `$SLURM_TMPDIR` per-job (node-local disk imports far faster than thousands of tiny files on the parallel FS) or pack a squashfs/`venv --copies` tarball.
 
-**Prefetch model weights on the login node**, then run offline:
+**Prefetch model weights on the login node**, then run offline (`hf` ships with the `huggingface_hub`/`transformers` install above):
 ```bash
 export HF_HOME="${SCRATCH:?run on a login node}/hf"   # on SCRATCH (tens of GB); NOT $HOME
+hf auth login                                         # only for GATED/private models (Llama, etc.); or: export HF_TOKEN=...
 hf download "$MODEL_ID"                                # snapshots + resumes partials
 # in the job: HF_HUB_OFFLINE=1, TRANSFORMERS_OFFLINE=1, and HF_HOME pointing at the SAME path
 ```
