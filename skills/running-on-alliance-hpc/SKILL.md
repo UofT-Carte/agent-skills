@@ -40,7 +40,7 @@ claude mcp add --transport http alliance-docs https://alliance-docs-mcp.fly.dev/
 
 Every run, in order. Each step exists to surface a failure *before* it costs GPU time.
 
-1. **Deliver code with git, data with rsync.** The cluster checkout is a real authed git repo. **Tracked file changed → `git pull` on the cluster. Gitignored file (data, `.env`) changed → `rsync`.** `git pull` cannot carry gitignored paths — confusing the two causes the classic stale-data crash (job runs new code against old data, dies on a missing key/file). See `slurm-ops-reference.md` for resume-safe rsync of huge files.
+1. **Deliver code with git, data with rsync.** *First time:* on a login node, **`git clone` your repo** into `/project` or `/scratch` and authenticate git once (HTTPS + a GitHub token, or an SSH key generated on the cluster) — login nodes always have internet. *Every time after:* **tracked file changed → `git pull --ff-only`; gitignored file (data, `.env`) changed → `rsync`.** `git pull` cannot carry gitignored paths — confusing the two causes the classic stale-data crash (new code against old data, dies on a missing key/file). First-time git auth + resume-safe rsync of huge files are in `slurm-ops-reference.md`.
 
 2. **Stage everything heavy on a *login node*, before any GPU allocation.** Build the venv, run model-free tests, and pre-download weights on the login node. A broken wheel or a 40-minute checkpoint download should surface for free — never 10 minutes into a 4×H100 allocation. Make this step **idempotent** (reuse the env if present; `hf download` resumes).
 

@@ -15,19 +15,40 @@ Login nodes: editing, git, short data prep, job submission — **no GPU, no heav
 
 ## Moving code and data
 
-**Code = git; gitignored data/secrets = rsync.** The cluster holds an authed git clone. Deliver tracked changes with `git pull --ff-only` (fails loudly instead of merging over cluster-local edits); rsync only an allowlist of gitignored files git can't carry.
+**Code = git; gitignored data/secrets = rsync.**
+
+**First time — set up a git checkout on the cluster** (don't assume one exists). On a login node — login nodes always have internet, even on air-gapped clusters — clone your repo into `/project` (durable) or `/scratch`, authenticating git once. Two options:
+
+```bash
+ssh <user>@<cluster>.alliancecan.ca       # (MFA — a human does this)
+cd ~/projects/def-<pi>/<user>             # durable; or ~/scratch/<user>
+
+# Option A — HTTPS + a GitHub Personal Access Token (paste the token when prompted
+# for a password), cached so you aren't re-prompted every pull:
+git config --global credential.helper 'cache --timeout=86400'
+git clone https://github.com/<owner>/<repo>.git
+
+# Option B — an SSH key generated ON the cluster, added to GitHub > Settings > SSH keys:
+ssh-keygen -t ed25519 -C "<cluster>"      # accept defaults
+cat ~/.ssh/id_ed25519.pub                 # paste this into GitHub, then:
+git clone git@github.com:<owner>/<repo>.git
+```
+
+A private repo needs one of these once; a public repo clones with no auth. Set your `user.name`/`user.email` on the cluster too if you'll commit there.
+
+**Every time after — tracked → git, gitignored → rsync.** Pull with `--ff-only` (fails loudly instead of merging over cluster-local edits); rsync only the gitignored files git can't carry.
 
 ```bash
 # CODE / CONFIG (tracked)
 git commit -am "..."; git push          # local
-ssh <user>@nibi.alliancecan.ca           # (MFA — a human does this)
-cd ~/scratch/<proj> && git pull
+ssh <user>@<cluster>.alliancecan.ca      # (MFA — a human does this)
+cd <proj> && git pull --ff-only
 
 # DATA + RESULTS (gitignored): rsync only — git will NOT carry these
 rsync -av --exclude '.venv' --exclude env --exclude __pycache__ \
   --exclude .pytest_cache --exclude results \
-  ./ <user>@nibi.alliancecan.ca:~/scratch/<proj>/        # push data up
-rsync -av <user>@nibi.alliancecan.ca:~/scratch/<proj>/results/ results/   # pull results down
+  ./ <user>@<cluster>.alliancecan.ca:<proj>/             # push data up
+rsync -av <user>@<cluster>.alliancecan.ca:<proj>/results/ results/   # pull results down
 ```
 
 **The stale-data trap:** `git pull` updates code but cannot touch gitignored `data/`, so the cluster runs new configs against an **old dataset** and dies (e.g. `KeyError` on a filename that only exists in the new data). When data changes you must rsync it.
@@ -40,8 +61,6 @@ rsync -ah --partial --append-verify --mkpath --no-inc-recursive --info=progress2
 `--partial`+`--append-verify` resume then checksum the whole file; `--mkpath` makes missing dirs (rsync ≥ 3.2.3); `--no-inc-recursive --info=progress2` give one aggregate progress line. **Always verify after transfer** — size *and* semantics (e.g. `pq.read_metadata(f).num_rows`).
 
 **Recover a deleted `$HOME`/`$PROJECT` file** from 30-min snapshots: `oops [dir]`, then `cp` the returned (read-only) path. Copying scratch→project with symlinks leaves links pointing at scratch — use `tar -cf - ./* | tar -C /project/.../dest -xf -`.
-
-**exFAT local quirk:** a local working copy on exFAT commits new `.sh` files non-executable. After `git add`: `git update-index --chmod=+x path/to/script.sh`. (`.sbatch` run via `sbatch` don't need the bit; scripts run as `./x.sh` do.)
 
 ## sbatch template
 
@@ -139,5 +158,4 @@ scancel <jobid>                                        # scancel -u $USER kills 
 | `FAILED` fast: "input not found: …parquet" | large input absent from scratch (missing migration / manual removal) | Re-upload from the off-cluster source of truth; add a prereq `ls`/row-count before submitting |
 | New run mixes in stale rows | leftover parts/checkpoint from a prior run merged in | Clear parts + checkpoint + old output before a fresh run |
 | Concurrent array tasks corrupt the venv | all tasks installed into the same venv path at once | Build the venv once on login; tasks only `source` it |
-| `.sh` won't execute after sync | exFAT local FS dropped the exec bit at commit | `git update-index --chmod=+x <script>` |
 | Jobs stuck `PD` for ages | over-requested `--time` and/or many full-H100s competing | right-size `--time` for backfill; throttle the array with `%K` |
